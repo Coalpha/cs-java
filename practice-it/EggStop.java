@@ -1,0 +1,1 @@
+public class EggStop{public static void main(String[] a){System.out.print("  ______\n /      \\\n/        \\\n\\        /\n \\______/\n\n  ______\n /      \\\n/        \\\n\\        /\n \\______/\n+--------+\n\n  ______\n /      \\\n/        \\\n|  STOP  |\n\\        /\n \\______/\n+--------+\n");}}

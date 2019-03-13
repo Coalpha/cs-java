@@ -1,0 +1,1 @@
+[...(d=document)[g="getElementsByClassName"]("solvedproblemstatus")].concat([...d.querySelectorAll('img[src="/images/blank.gif"]')]).map(n=>n[p='parentNode'].removeChild(n));[...d[g]("problemlink")].map((a,P)=>{(P=a[p]).className="solvedproblem";P.innerHTML=`<span class="solvedproblemstatus"><i class="fa fa-check-circle-o pass-icon"></i></span>${P.innerHTML}`});
