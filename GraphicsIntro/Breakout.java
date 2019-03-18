@@ -1,12 +1,20 @@
-import acm.graphics.*;
-import acm.program.*;
 import java.awt.*;
+import acm.program.*;
+import acm.graphics.*;
 import java.awt.event.*;
+
+import java.util.Set;
+import java.util.LinkedHashSet;
 import java.util.concurrent.ThreadLocalRandom;
 
 class Block extends GRect {
   private static final long serialVersionUID = 0xdeadbeef;
-  private static Color[] colors = new Color[] { Color.lightGray, Color.gray, Color.darkGray, Color.black };
+  private static Color[] colors = new Color[] {
+    Color.lightGray,
+    Color.gray,
+    Color.darkGray,
+    Color.black
+  };
 
   int arraX;
   int arraY;
@@ -18,13 +26,14 @@ class Block extends GRect {
 
   Block() {
     super(0, 0);
+    setColor(new Color(0, 0, 0, 0));
     setFilled(true);
     updateColor();
   }
 
   @Override
   public String toString() {
-    return "Block";
+    return "Block@(" + getX() + ", " + getY() + ") # " + getRightX() + " x " + getBottomY();
   }
 }
 
@@ -32,10 +41,10 @@ class Ball extends GOval {
   private static final long serialVersionUID = 0xdeadbeef;
 
   Ball() {
-    super(0, 0, 40, 40);
-    System.out.println("Made a ball");
+    super(0, 0, 0, 0);
     setFilled(true);
     setFillColor(Color.pink);
+    setColor(new Color(0, 0, 0, 0));
   }
 
   int velocitX = 2;
@@ -45,9 +54,13 @@ class Ball extends GOval {
   int upperY;
 
   void setBoundaryBox(int x, int y) {
-    System.out.println("The boundaryBox was set to " + x + ", " + y);
+    // System.out.println("The boundaryBox was set to " + x + ", " + y);
     upperX = x;
     upperY = y;
+  }
+
+  void setSize(int i) {
+    setSize(i, i);
   }
 
   boolean hitTop() {
@@ -81,10 +94,31 @@ class Ball extends GOval {
   }
 }
 
+enum XCollide {
+  LEFT,
+  RIGHT,
+}
+enum YCollide {
+  TOP,
+  BOTTOM,
+}
+interface BallCollision {
+  XCollide x = XCollide.LEFT;
+  YCollide y = YCollide.TOP;
+}
 public class Breakout extends GraphicsProgram {
   static final long serialVersionUID = 0xdeadbeef;
-  static int blocksPerRow = 10;
-  static int blocksPerCol = 5;
+  interface config {
+    static int countX = 10;
+    static int countY = 5;
+    static int blockCount = countX * countY;
+  }
+  static int[] blockAreaWidthBounds(int width) {
+    return new int[]{ 0, width };
+  }
+  static int[] blockAreaHeightBounds(int height) {
+    return new int[]{ 0, height / 2 };
+  }
 
   public static void main(String[] a) {
     Breakout b = new Breakout();
@@ -92,86 +126,138 @@ public class Breakout extends GraphicsProgram {
     b.start();
   }
 
-  // Instance
+  Thread thread;
   volatile boolean running = false;
-
-  int height;
-  int width;
-  int blocksLeft;
-  Block[][] blocks = new Block[blocksPerCol][blocksPerRow];
-  Ball ball = new Ball();
-  long lastRunCall;
+  /** in deciseconds */
+  static int originalCountDown = 1;
+  volatile int countDown = originalCountDown;
   public void init() {
-    height = getHeight();
-    width = getWidth();
-    ball.setLocation(height / 1.3, width / 2);
+    Breakout that = this;
     addComponentListener(new ComponentAdapter() {
       @Override
       public void componentResized(ComponentEvent e) {
-        if (System.currentTimeMillis() > lastRunCall + 100) {
-          run(); // Now that's how you do a closure!
-        };
+        running = false;
+        countDown = originalCountDown;
       }
     });
-    blocksLeft = blocksPerRow * blocksPerCol;
-    for (int y = 0; y < blocksPerCol; y++) {
-      Block[] row = blocks[y];
-      for (int x = 0; x < blocksPerRow; x++) {
-        Block chain = new Block();
-        chain.arraX = x;
-        chain.arraY = y;
-        row[x] = chain;
-      }
-    }
-    new Thread(() -> {
-      while(true) {
-        if (running) {
-          ball.scram();
-          pause(20);
+    thread = new Thread(() -> {
+      while (true) {
+        if (that.running) {
+          advanceFrame();
+        } else {
+          try {
+            if (countDown --> 0) {
+              Thread.sleep(100);
+            } else {
+              that.run();
+            }
+          } catch(Exception e) {}
         }
       }
-    }).start();
+    });
+    thread.start();
   }
 
+  int height;
+  int width;
+  static class BlockData {
+    static int blocksLeft;
+    static int[] boundsX;
+    static int[] boundsY;
+    static int areaWidth;
+    static int areaHeight;
+    static int blockWidth;
+    static int blockHeight;
+    static Block[][] blocks = new Block[config.countY][config.countX];
+    static void calc(int width, int height) {
+      /** 0 is the lower bound. 1 is the upper bound */
+      boundsX = blockAreaWidthBounds(width);
+      boundsY = blockAreaHeightBounds(height);
+      areaWidth = boundsX[1] - boundsX[0];
+      areaHeight = boundsY[1] - boundsY[0];
+      blockWidth = (areaWidth) / config.countX;
+      blockHeight = (areaHeight) / config.countY;
+    }
+    static Block block(int arraX, int arraY) {
+      if (arraX < config.countX && arraY < config.countY) {
+        return blocks[arraY][arraX];
+      }
+      return null;
+    }
+    static Block getBlockAtPoint(int x, int y) {
+      return block(x / blockWidth, y / blockHeight);
+    }
+    static Block getBlockAtPoint(double x, double y) {
+      return getBlockAtPoint((int) x, (int) y);
+    }
+    static Block getBlockAtPoint(GPoint p) {
+      return getBlockAtPoint(p.getX(), p.getY());
+    }
+    static void remove(Block b) {
+      blocks[b.arraY][b.arraX] = null;
+    }
+  }
+  Ball ball = new Ball();
   public void run() {
-    running = false;
     clear();
-    height = getHeight();
+
     width = getWidth();
-    System.out.println("Height: " + height + " Width: " + width);
-    int blockAreaHeight = height / 2;
-    int blockWidth = width / blocksPerRow;
-    int blockHeight = blockAreaHeight / blocksPerCol;
-    for (int y = 0; y < blocksPerCol; y++) {
-      Block[] row = blocks[y];
-      for (int x = 0; x < blocksPerRow; x++) {
-        Block current = row[x];
-        if (current != null) {
-          current.setLocation(x * blockWidth, y * blockHeight);
-          current.setSize(blockWidth, blockHeight);
-          add(current);
-        }
+    height = getHeight();
+
+    BlockData.calc(width, height);
+    // Annoyingly, this segment can't be refactored into Streams
+    // Each block needs to know it's position within the this.blocks matrix
+    for (int y = 0; y < config.countY; y++) {
+      Block[] row = BlockData.blocks[y];
+      for (int x = 0; x < config.countX; x++) {
+        Block cell = new Block();
+        cell.arraX = x;
+        cell.arraY = y;
+        row[x] = cell;
+        cell.setLocation(
+          x * BlockData.blockWidth + BlockData.boundsX[0],
+          y * BlockData.blockHeight + BlockData.boundsY[0]
+        );
+        cell.setSize(
+          BlockData.blockWidth,
+          BlockData.blockHeight
+        );
+        add(cell);
       }
     }
+    BlockData.blocksLeft = config.blockCount;
+
+    ball.setLocation(height / 1.3, width / 2);
     ball.setBoundaryBox(width, height);
+    ball.setSize(WIDTH, HEIGHT);
     add(ball);
-    lastRunCall = System.currentTimeMillis();
     running = true;
   }
 
-  public void mousePressed(MouseEvent e) {
-    GObject gob = getElementAt(e.getX(), e.getY());
-    if (gob != null && gob.toString() == "Block") {
-      bean((Block) gob);
+  void advanceFrame() {
+    ball.scram();
+    pause(15);
+    Block atCenter = BlockData.getBlockAtPoint(ball.getLocation());
+    if (atCenter != null) {
+      remove(atCenter);
     }
+  }
+
+  void doCollide() {
+    Set<Block> blocks = new LinkedHashSet<>();
+    blocks.add(BlockData.getBlockAtPoint(ball.getLocation()));
+    blocks.add(BlockData.getBlockAtPoint(ball.getRightX(), ball.getY()));
+    blocks.add(BlockData.getBlockAtPoint(ball.getX(), ball.getBottomY()));
+    blocks.add(BlockData.getBlockAtPoint(ball.getRightX(), ball.getBottomY()));
+    // Objects::nonNull
   }
 
   void bean(Block b) {
     b.health--;
     if (b.health < 0) {
       remove(b);
-      blocks[b.arraY][b.arraX] = null;
-      blocksLeft--;
+      BlockData.blocks[b.arraY][b.arraX] = null;
+      BlockData.blocksLeft--;
     } else {
       b.updateColor();
     }
