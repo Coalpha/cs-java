@@ -7,11 +7,11 @@ import java.util.function.*;
 import java.util.Set;
 import java.util.List;
 import java.awt.Point;
-import java.util.Arrays;
 import java.util.Objects;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.concurrent.ThreadLocalRandom;
+
 class Block extends GRect {
   private static final long serialVersionUID = 0xdeadbeef;
   private static Color[] colors = new Color[] { Color.lightGray, Color.gray, Color.darkGray, Color.black };
@@ -21,6 +21,7 @@ class Block extends GRect {
   int health = ThreadLocalRandom.current().nextInt(0, 4);
 
   Color transparent = new Color(0, 0, 0, 0);
+
   void updateColor() {
     if (health < 0) {
       setFillColor(transparent);
@@ -49,7 +50,7 @@ class Block extends GRect {
     super.setSize(arg0, arg1);
   }
 
-  static int clamp(double x, double a, double b) {
+  static int clamp(double a, double x, double b) {
     if (x < a) {
       return (int) a;
     }
@@ -60,32 +61,56 @@ class Block extends GRect {
   }
 
   Point closestPointTo(Point p) {
-    return new Point(
-      clamp(getX(), p.getX(), getRightX()),
-      clamp(getY(), p.getY(), getBottomY())
-    );
+    return new Point(clamp(getX(), p.getX(), getRightX()), clamp(getY(), p.getY(), getBottomY()));
   }
 
   double hw;
+
   double areay(Point p) {
     return getHeight() / getWidth() * Math.abs(p.getX() - getCenterX());
   }
+
   double areax(Point p) {
     return getWidth() / getHeight() * Math.abs(p.getY() - getCenterY());
   }
+
   /** assumes that it's within the bounds of the rectangle */
-  boolean pointIsInsideTop(Point p) {
+  boolean pointIsInsideBottom(Point p) {
     return (areay(p) + getCenterY()) <= p.getY();
   }
-  boolean pointIsInsideBottom(Point p) {
+
+  boolean pointIsInsideTop(Point p) {
     return p.getY() <= (getCenterY() - areay(p));
   }
+
+  byte pointInsideY(Point p) {
+    if (pointIsInsideTop(p)) {
+      return -1;
+    }
+    if (pointIsInsideBottom(p)) {
+      return 1;
+    }
+    return 0;
+  }
+
   boolean pointIsInsideLeft(Point p) {
     return p.getX() <= (getCenterX() - areax(p));
   }
+
   boolean pointIsInsideRight(Point p) {
     return (areax(p) + getCenterX()) <= p.getX();
   }
+
+  byte pointInsideX(Point p) {
+    if (pointIsInsideLeft(p)) {
+      return -1;
+    }
+    if (pointIsInsideBottom(p)) {
+      return 1;
+    }
+    return 0;
+  }
+
   void damage() {
     health--;
     updateColor();
@@ -95,17 +120,9 @@ class Block extends GRect {
 class DisplayPoint extends GOval {
   private static final long serialVersionUID = 0xdeadbeef;
 
-  DisplayPoint(int x, int y, int r) {
-    super(x, y, r, r);
-    setFilled(true);
-    setFillColor(Color.ORANGE);
-    setColor(new Color(0, 0, 0, 0));
-  }
-
   DisplayPoint(Point p, int r) {
-    super(p.getX(), p.getY(), r, r);
+    super(p.getX() - r / 2, p.getY() - r / 2, r, r);
     setFilled(true);
-    setFillColor(Color.ORANGE);
     setColor(new Color(0, 0, 0, 0));
   }
 }
@@ -134,6 +151,8 @@ class Ball extends GOval {
 
   void setSize(int i) {
     setSize(i, i);
+    velocitX = i / 5;
+    velocitY = i / 5;
   }
 
   boolean hitTop() {
@@ -161,14 +180,13 @@ class Ball extends GOval {
   }
 
   void velocityRight() {
-    System.out.println("Right");
     velocitX = Math.abs(velocitX);
   }
 
   void velocityLeft() {
-    System.out.println("Left");
     velocitX = Math.abs(velocitX) * -1;
   }
+
   void scram() {
     move(velocitX, velocitY);
     if (hitTop()) {
@@ -210,9 +228,35 @@ class BallCollision {
     y = yC;
     hasCollided = xC != XCollide.NO || yC != YCollide.NO;
   }
+
   boolean hasCollided;
   XCollide x;
   YCollide y;
+
+  @Override
+  public String toString() {
+    String s = "";
+    if (hasCollided) {
+      if (x == XCollide.LEFT) {
+        s += "left ";
+      } else if (x == XCollide.RIGHT) {
+        s += "right";
+      } else {
+        s += "no   ";
+      }
+      s += " ";
+      if (y == YCollide.TOP) {
+        s += "top";
+      } else if (y == YCollide.BOTTOM) {
+        s += "bot";
+      } else {
+        s += "no";
+      }
+      return s;
+    } else {
+      return "no";
+    }
+  }
 }
 
 public class Breakout extends GraphicsProgram {
@@ -353,10 +397,8 @@ public class Breakout extends GraphicsProgram {
         cell.arraX = x;
         cell.arraY = y;
         row[x] = cell;
-        cell.setLocation(
-          x * BlockData.blockWidth + BlockData.boundsX[0],
-          y * BlockData.blockHeight + BlockData.boundsY[0]
-        );
+        cell.setLocation(x * BlockData.blockWidth + BlockData.boundsX[0],
+            y * BlockData.blockHeight + BlockData.boundsY[0]);
         cell.setSize(BlockData.blockWidth, BlockData.blockHeight);
         add(cell);
       }
@@ -370,10 +412,15 @@ public class Breakout extends GraphicsProgram {
     running = true;
   }
 
+  // public void mouseMoved(MouseEvent e) {
+  //   ball.setX(e.getX());
+  //   ball.setY(e.getY());
+  // }
+
   void tick() {
     ball.scram();
     doCollide();
-    pause(15);
+    pause(30);
   }
 
   void doCollide() {
@@ -387,14 +434,16 @@ public class Breakout extends GraphicsProgram {
       // final Color previous = b.getFillColor();
       BallCollision bC = hasCollided(b);
       if (bC.x == XCollide.LEFT) {
-        ball.velocityRight();
-      } else if (bC.x == XCollide.RIGHT) {
+        // remember, the block is being hit from the LEFT side
+        // therefore the ball should also bounce left
         ball.velocityLeft();
+      } else if (bC.x == XCollide.RIGHT) {
+        ball.velocityRight();
       }
       if (bC.y == YCollide.TOP) {
-        ball.velocityDown();
-      } else if (bC.y == YCollide.BOTTOM) {
         ball.velocityUp();
+      } else if (bC.y == YCollide.BOTTOM) {
+        ball.velocityDown();
       }
       if (bC.hasCollided) {
         bean(b);
@@ -402,42 +451,48 @@ public class Breakout extends GraphicsProgram {
     });
   }
 
-  /**
-   * p_{inside}r_{areaBottom}\left(p_x,p_y\right)r_{bottom}\le y\le-r_{areay}\left(x\right)+r_{center}\left[2\right]
-   */
   Point ballClamped(Block b) {
     return b.closestPointTo(ball.getCenter());
   }
+
   BallCollision hasCollided(Block b) {
     Point clamped = ballClamped(b);
-    // final DisplayPoint dP = new DisplayPoint(clamped, 10);
-    // add(dP);
+    // final DisplayPoint dP = new DisplayPoint(clamped, 6);
     XCollide xC = XCollide.NO;
     YCollide yC = YCollide.NO;
-    // nextTick.add((Breakout B) -> B.remove(dP));
+    // blue
+    // red pur
+    // cyan
+    // dP.setFillColor(Color.BLACK);
     if (ball.has(clamped)) {
       if (b.pointIsInsideLeft(clamped)) {
         xC = XCollide.LEFT;
+        // dP.setFillColor(Color.RED);
       } else if (b.pointIsInsideRight(clamped)) {
         xC = XCollide.RIGHT;
+        // dP.setFillColor(Color.MAGENTA);
       } else {
         xC = XCollide.NO;
       }
-      if (b.pointIsInsideBottom(clamped)) {
-        yC = YCollide.BOTTOM;
-      } else if (b.pointIsInsideTop(clamped)) {
+      if (b.pointIsInsideTop(clamped)) {
         yC = YCollide.TOP;
+        // dP.setFillColor(Color.BLUE);
+      } else if (b.pointIsInsideBottom(clamped)) {
+        // dP.setFillColor(Color.CYAN);
+        yC = YCollide.BOTTOM;
       } else {
         yC = YCollide.NO;
       }
     }
+    // add(dP);
+    // nextTick.add((Breakout B) -> B.remove(dP));
     return new BallCollision(xC, yC);
   }
 
   void bean(Block b) {
     b.damage();
     if (b.health < 0) {
-      removeBlock(b);
+    removeBlock(b);
     }
     isGameOver();
   }
