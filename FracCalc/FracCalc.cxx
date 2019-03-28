@@ -1,18 +1,24 @@
-#define DEBUG
-#include <cctype>
 #include <string>
 #include <iostream>
 #include <optional>
 #include <algorithm>
+// #define DEBUG
 using namespace std;
 
+const char MIXED_NUM_DELIMITER('_');
 class Fraction {
   int nu;
   int de;
 public:
-  Fraction() {
-    this->nu = 0;
-    this->de = 1;
+  static int gcm(int nu, int de) {
+    return de == 0 ? nu : Fraction::gcm(de, nu % de);
+  }
+  static int gcm(Fraction* f) {
+    return Fraction::gcm(f->nu, f->de);
+  }
+  Fraction(Fraction* f) {
+    this->nu = f->nu;
+    this->de = f->de;
   }
   Fraction(int i) {
     this->nu = i;
@@ -40,17 +46,44 @@ public:
   Fraction operator/(const Fraction& f) {
     return *this * Fraction(f.de, f.nu);
   }
+  void scale(int i) {
+    this->nu *= i;
+    this->de *= i;
+  }
+  void elacs(int i) {
+    this->nu /= i;
+    this->de /= i;
+  }
+  void simplify() {
+    this->elacs(Fraction::gcm(this));
+  }
   string format() {
-    // this->simplify();
-    if (this->de == 1) {
-      return to_string(this->de);
+    if (this->de == 0) {
+      return "undefined";
     }
+    if (this->de == 1) {
+      return to_string(this->nu);
+    }
+    if (this->nu == this->de) {
+      return "1";
+    }
+    if (this->de < 0) {
+      this->scale(-1);
+    }
+    this->simplify();
     if (abs(this->nu) > this->de) {
-      string res = to_string(this->nu / this->de);
-      string frac;
-      frac += to_string(abs(this->nu % this->de)) + "/" + to_string(this->de);
-      if (frac != "") {
-        res += "_" + frac;
+      // if it can be a mixed number
+      string prefix;
+      string suffix;
+      if (this->nu < 0) {
+        prefix = "-(";
+        suffix = ")";
+        this->nu *= -1;
+      }
+      string res(to_string(this->nu / this->de));
+      int remainder(this->nu % this->de);
+      if (remainder != 0) {
+        res += MIXED_NUM_DELIMITER + to_string(remainder) + '/' + to_string(this->de);
       }
       return res;
     }
@@ -62,9 +95,8 @@ public:
 };
 string e("\x1B[");
 string rst(e + "0m");
-string red(e + "31m");
-typedef Fraction* p_frac; // pointer fraction
-p_frac parseSide(string& side) {
+string cyan(e + "36m");
+Fraction* parseSide(string& side) {
   #ifdef DEBUG
   cout << "parseSide(" << side << ");\n";
   #endif
@@ -79,9 +111,9 @@ p_frac parseSide(string& side) {
     char c(side[i]);
     if (isdigit(c)) {
       last += c;
-    } else if (c == '_') {
+    } else if (c == MIXED_NUM_DELIMITER) {
       if (foundMixed) {
-        ::cerr << "Unexpected second \"_\"\n";
+        ::cerr << "Unexpected second \"" << MIXED_NUM_DELIMITER << "\"\n";
         return nullptr;
       }
       if (last.length() < 1) {
@@ -89,18 +121,34 @@ p_frac parseSide(string& side) {
         return nullptr;
       }
       foundMixed = true;
-      whole = stoi("0" + last);
+      whole = stoi(last);
+      last = "";
     } else if (c == '/') {
+      #ifdef DEBUG
+      cout << "Found \"/\"\n";
+      #endif
       if (foundDivide) {
         ::cerr << "Unexpected second \"/\"\n";
         return nullptr;
       }
+      foundDivide = true;
       if (last.length() < 1) {
         ::cerr << "Expected numerator component of fraction\n";
         return nullptr;
       }
+      #ifdef DEBUG
+      cout << "Last is \"" << last << "\"\n";
+      #endif
       nu = stoi(last);
-      last = "0";
+      last = "";
+      #ifdef DEBUG
+      cout << "Flushed Last\n";
+      #endif
+    } else if (
+      (c == '-' || c == '+')
+      && last.length() == 0
+    ) {
+      last += c;
     } else {
       ::cerr << "Unexpected \"" << c << "\"\n";
       return nullptr;
@@ -117,20 +165,19 @@ p_frac parseSide(string& side) {
     return nullptr;
   }
   if (foundMixed) {
-    return &(Fraction(whole) + Fraction(nu, de));
+    return new Fraction(Fraction(whole) + Fraction(nu, de));
   }
   if (foundDivide) {
-    return &Fraction(nu, de);
+    return new Fraction(nu, de);
   }
   if (last.length() > 0) {
-    return &Fraction(stoi(last));
+    return new Fraction(stoi(last));
   }
   ::cerr << "Expected integer(s)\n";
   return nullptr;
 };
 string solve(string& input) {
   int len(input.length());
-  cerr << red;
   #ifdef DEBUG
   cout << "solve(" << input << ");\n";
   #endif
@@ -140,7 +187,7 @@ string solve(string& input) {
     char c(input[i]);
     if (c == ' ') {
       if (++partIndex > 2) {
-        cerr << "More than two spaces found in expression\n";
+        cerr << "More than two spaces found in expression";
         goto exit;
       };
     } else {
@@ -151,40 +198,45 @@ string solve(string& input) {
   cout << parts[0] << ", " << parts[1] << ", " << parts[2] << '\n';
   #endif
   if (partIndex != 2) {
-    cerr << "Less than two spaces in expression\n";
+    cerr << "Less than two spaces in expression ";
     goto exit;
   }
   if (parts[1].length() == 1) {
     char operand(parts[1][0]);
-    p_frac p_left(parseSide(parts[0]));
-    if (p_left) {
-      Fraction left(*p_left);
-      p_frac p_right(parseSide(parts[2]));
-      if (p_right) {
-        Fraction right(*p_right);
-        Fraction res { 0, 1 }; // oof
+    Fraction* left(parseSide(parts[0]));
+    if (left) {
+      Fraction* right(parseSide(parts[2]));
+      if (right) {
+        Fraction* res;
         if (operand == '+') {
-          res = left + right;
+          res = new Fraction(*left + *right);
         } else if (operand == '-') {
-          res = left - right;
+          res = new Fraction(*left - *right);
         } else if (operand == '*') {
-          res = left * right;
+          res = new Fraction(*left * *right);
         } else if (operand == '/') {
-          res = left / right;
+          res = new Fraction(*left / *right);
         } else {
-          cerr << "Unexpected operand " << operand << "\"\n";
+          cerr << "Unexpected operand " << operand << "\"";
           goto exit;
         }
-        return res.toString();
-      } else cerr << "Error parsing right side of " << operand << '\n';
-    } else cerr << "Error parsing left side of " << operand << '\n';
-  } else cerr << "The operand must be a character\n";
+        #ifdef DEBUG
+        cout << left->toString() << ", " << right->toString();
+        #endif
+        string rstring = res->format();
+        delete left;
+        delete right;
+        delete res;
+        return rstring;
+      } else cerr << "Error parsing right side of " << operand;
+    } else cerr << "Error parsing left side of " << operand;
+  } else cerr << "The operand must be a character";
   exit:
   return "";
 }
 int main() {
   while (true) {
-    cout << "$ ";
+    cout << cyan << "$ " << rst;
     string input{};
     getline(cin, input);
     transform(input.begin(), input.end(), input.begin(), ::tolower);
@@ -192,7 +244,7 @@ int main() {
       break;
     }
     string sln(solve(input));
-    cout << sln;
+    cout << sln << "\n\n";
   }
   return 0;
 }
