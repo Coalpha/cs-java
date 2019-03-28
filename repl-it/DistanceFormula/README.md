@@ -1,3 +1,5 @@
+# DistanceFormula
+
 Add the following method to the Point class:
 
 public double distance(Point other)

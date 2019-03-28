@@ -99,9 +99,9 @@ interface Operator {
 public class FracCalc {
   /** Main is only if this file is used as a command line thingie */
   public static void main(String[] a) {
+    Scanner console = new Scanner(System.in);
     while (true) {
       System.out.print("$ ");
-      Scanner console = new Scanner(System.in);
       String input = console.nextLine();
       if (input.matches("[qQeE]|quit|exit")) {
         console.close();

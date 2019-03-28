@@ -8,3 +8,4 @@ Index:
 - [Letter](Letter.java)
 - [Pikachu Chatter](PikachuChatter.java)
 - [The House That Jack Built](TheHouseThatJackBuilt.java)
+- [The House That Jack Built (C++)](the_house_that_jack_built.cxx)

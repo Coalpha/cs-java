@@ -3,8 +3,9 @@
 This repository is full of stuff that's for my computer science class.
 It's taught in Java since that's what the AP-CS standards require.
 Inside this repository is disorganized and messy code that's too small or too bad to deserve it's own repository.
+I've also decided to teach myself C++ because apparently it's even worse than Java
 
-### Style
+## Style
 
 Project directories should be in `PascalCase`.
 Other directories for miscellaneous code should be in `kebab-case`
