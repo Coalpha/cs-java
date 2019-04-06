@@ -1,9 +1,20 @@
 #include <string>
+#include <csignal>
 #include <iostream>
 #include <optional>
 #include <algorithm>
 // #define DEBUG
 using namespace std;
+
+string e("\x1B[");
+string rst(e + "0m");
+string pink(e + "35m");
+string cyan(e + "36m");
+
+void interrupt( int signum ) {
+   cout << pink << "\nInterrupt! Exiting Gracefully...\n";
+   exit(signum);  
+}
 
 const char MIXED_NUM_DELIMITER('_');
 class Fraction {
@@ -24,9 +35,9 @@ public:
     this->nu = i;
     this->de = 1;
   }
-  Fraction(int nu, int de) {
-    this->nu = nu;
-    this->de = de;
+  Fraction(int num, int den) {
+    this->nu = num;
+    this->de = den;
   }
   Fraction operator+(const Fraction& f) {
     return Fraction (
@@ -93,21 +104,19 @@ public:
     return to_string(this->nu) + "/" + to_string(this->de);
   }
 };
-string e("\x1B[");
-string rst(e + "0m");
-string cyan(e + "36m");
+
 Fraction* parseSide(string& side) {
   #ifdef DEBUG
   cout << "parseSide(" << side << ");\n";
   #endif
-  int len(side.length());
+  unsigned int len(side.length());
   string last;
   bool foundMixed(false);
   bool foundDivide(false);
   int whole{};
   int nu{};
   int de{};
-  for (int i{}; i < len; i++) {
+  for (unsigned int i{}; i < len; i++) {
     char c(side[i]);
     if (isdigit(c)) {
       last += c;
@@ -175,15 +184,16 @@ Fraction* parseSide(string& side) {
   }
   ::cerr << "Expected integer(s)\n";
   return nullptr;
-};
+}
+
 string solve(string& input) {
-  int len(input.length());
+  unsigned int len(input.length());
   #ifdef DEBUG
   cout << "solve(" << input << ");\n";
   #endif
   int partIndex{};
   string parts[3];
-  for (int i{}; i < len; i++) {
+  for (unsigned int i{}; i < len; i++) {
     char c(input[i]);
     if (c == ' ') {
       if (++partIndex > 2) {
@@ -234,7 +244,9 @@ string solve(string& input) {
   exit:
   return "";
 }
+
 int main() {
+  signal(SIGINT, interrupt);
   while (true) {
     cout << cyan << "$ " << rst;
     string input{};
