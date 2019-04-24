@@ -2,6 +2,7 @@ import java.awt.*;
 import acm.program.*;
 import acm.graphics.*;
 import java.awt.event.*;
+import java.awt.geom.Point2D;
 import java.util.function.*;
 
 import java.util.Set;
@@ -12,42 +13,22 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.concurrent.ThreadLocalRandom;
 
-class Block extends GRect {
+interface Settings {
+  final int speed = 15;
+  final int paddleHeight = 10;
+  final Color paddleColor = Color.red;
+  final Color paddleHitColor = Color.magenta;
+  final int[] velocity = { 0, -2 };
+  final boolean collisionDots = false;
+}
+
+class Blonk extends GRect {
   private static final long serialVersionUID = 0xdeadbeef;
-  private static Color[] colors = new Color[] { Color.lightGray, Color.gray, Color.darkGray, Color.black };
 
-  int arraX;
-  int arraY;
-  int health = ThreadLocalRandom.current().nextInt(0, 4);
-
-  Color transparent = new Color(0, 0, 0, 0);
-
-  void updateColor() {
-    if (health < 0) {
-      setFillColor(transparent);
-    } else {
-      setFillColor(Block.colors[health]);
-    }
-  }
-
-  void clearColor() {
-    setColor(transparent);
-  }
-
-  Block() {
+  Blonk() {
     super(0, 0);
+    setColor(new Color(0, 0, 0, 0));
     setFilled(true);
-    updateColor();
-  }
-
-  @Override
-  public String toString() {
-    return "Block@(" + getX() + ", " + getY() + ") # " + getRightX() + " x " + getBottomY();
-  }
-
-  @Override
-  public void setSize(double arg0, double arg1) {
-    super.setSize(arg0, arg1);
   }
 
   static int clamp(double a, double x, double b) {
@@ -63,6 +44,74 @@ class Block extends GRect {
   Point closestPointTo(Point p) {
     return new Point(clamp(getX(), p.getX(), getRightX()), clamp(getY(), p.getY(), getBottomY()));
   }
+
+  @Override
+  public String toString() {
+    return "Blonk@(" + getX() + ", " + getY() + ") # " + getRightX() + " x " + getBottomY();
+  }
+}
+
+class Paddle extends Blonk {
+  private static final long serialVersionUID = 0xdeadbeef;
+  static int[][] bounceAngles = {
+      { -5, -2 }
+    , { -4, -2 }
+    , { -4, -3 }
+    , { -3, -4 }
+    , { -1, -5 }
+
+    , {  0, -5 }
+
+    , { +1, -5 }
+    , { +3, -4 }
+    , { +4, -3 }
+    , { +4, -2 }
+    , { +5, -2 }
+  };
+  int[] getBounceAngle(Point clamped) {
+    double dxfromStart = clamped.getX() - getX();
+    double percentInside = dxfromStart / getWidth();
+    return Paddle.bounceAngles[(int) (percentInside * (bounceAngles.length - 1))];
+  }
+  void gotHit() {
+    setColor(Settings.paddleHitColor);
+  }
+  void normalColor() {
+    setColor(Settings.paddleColor);
+  }
+}
+
+class Block extends Blonk {
+  private static final long serialVersionUID = 0xdeadbeef;
+  private static Color[] colors = new Color[] { Color.lightGray, Color.gray, Color.darkGray, Color.black };
+
+  int arraX;
+  int arraY;
+  int health = ThreadLocalRandom.current().nextInt(0, 4);
+
+  Color transparent = new Color(0, 0, 0, 0);
+
+  void updateColor() {
+    if (isDead()) {
+      setFillColor(transparent);
+    } else {
+      setFillColor(Block.colors[health]);
+    }
+  }
+
+  void clearColor() {
+    setColor(transparent);
+  }
+
+  Block() {
+    super();
+    updateColor();
+  }
+
+  // @Override
+  // public void setSize(double arg0, double arg1) {
+  // super.setSize(arg0, arg1);
+  // }
 
   double hw;
 
@@ -115,6 +164,10 @@ class Block extends GRect {
     health--;
     updateColor();
   }
+
+  boolean isDead() {
+    return health < 0;
+  }
 }
 
 class DisplayPoint extends GOval {
@@ -137,8 +190,8 @@ class Ball extends GOval {
     setColor(new Color(0, 0, 0, 0));
   }
 
-  int velocitX = 2;
-  int velocitY = 3;
+  int velocitX = Settings.velocity[0];
+  int velocitY = Settings.velocity[1];
 
   int upperX;
   int upperY;
@@ -151,8 +204,6 @@ class Ball extends GOval {
 
   void setSize(int i) {
     setSize(i, i);
-    velocitX = i / 5;
-    velocitY = i / 5;
   }
 
   boolean hitTop() {
@@ -187,18 +238,20 @@ class Ball extends GOval {
     velocitX = Math.abs(velocitX) * -1;
   }
 
-  void scram() {
+  int scram() {
     move(velocitX, velocitY);
     if (hitTop()) {
       velocityDown();
     } else if (hitBottom()) {
-      velocityUp();
+      // vzelocityUp();
+      return 1;
     }
     if (hitLeft()) {
       velocityRight();
     } else if (hitRight()) {
       velocityLeft();
     }
+    return 0;
   }
 
   Point getCenter() {
@@ -211,6 +264,11 @@ class Ball extends GOval {
 
   boolean has(Point p) {
     return getCenter().distance(p) < radius();
+  }
+
+  void setVelocity(int[] i) {
+    velocitX = i[0];
+    velocitY = i[1];
   }
 }
 
@@ -226,23 +284,23 @@ class BallCollision {
   BallCollision(XCollide xC, YCollide yC) {
     x = xC;
     y = yC;
-    hasCollided = xC != XCollide.NO || yC != YCollide.NO;
+    whereHasCollided = xC != XCollide.NO || yC != YCollide.NO;
   }
 
-  boolean hasCollided;
+  boolean whereHasCollided;
   XCollide x;
   YCollide y;
 
   @Override
   public String toString() {
-    String s = "";
-    if (hasCollided) {
+    String s = "yeco ";
+    if (whereHasCollided) {
       if (x == XCollide.LEFT) {
-        s += "left ";
+        s += "left";
       } else if (x == XCollide.RIGHT) {
-        s += "right";
+        s += "rigt";
       } else {
-        s += "no   ";
+        s += "nolf";
       }
       s += " ";
       if (y == YCollide.TOP) {
@@ -250,11 +308,11 @@ class BallCollision {
       } else if (y == YCollide.BOTTOM) {
         s += "bot";
       } else {
-        s += "no";
+        s += "noy";
       }
       return s;
     } else {
-      return "no";
+      return "noco";
     }
   }
 }
@@ -294,6 +352,21 @@ public class Breakout extends GraphicsProgram {
   static int originalCountDown = 1;
   volatile int countDown = originalCountDown;
 
+  private boolean paused = false;
+
+  void unpause() {
+    paused = false;
+  }
+
+  void pause() {
+    paused = true;
+  }
+
+  public void mouseClicked() {
+    System.out.println("Hey, I'm actually working now for some reason");
+    paused = !paused;
+  }
+
   public void init() {
     Breakout that = this;
     addComponentListener(new ComponentAdapter() {
@@ -305,9 +378,17 @@ public class Breakout extends GraphicsProgram {
     });
     thread = new Thread(() -> {
       while (true) {
-        if (that.running) {
+        if (that.paused) {
+          try {
+            Thread.sleep(100);
+          } catch (Exception e) {
+
+          }
+        } else if (that.running) {
           nextTick.stream().forEach((Consumer<Breakout> c) -> c.accept(that));
-          tick();
+          if (!tick()) {
+            gameOver();
+          }
         } else {
           try {
             if (countDown-- > 0) {
@@ -378,6 +459,20 @@ public class Breakout extends GraphicsProgram {
     BlockData.remove(b);
   }
 
+  void beanBlock(Block b) {
+    b.damage();
+    if (b.isDead()) {
+      removeBlock(b);
+    }
+  }
+
+  DisplayPoint temp(Point p) {
+    final DisplayPoint dP = new DisplayPoint(p, 6);
+    add(dP);
+    nextTick.add((Breakout B) -> B.remove(dP));
+    return dP;
+  }
+
   Ball ball = new Ball();
 
   public void run() {
@@ -405,34 +500,69 @@ public class Breakout extends GraphicsProgram {
     }
     BlockData.blocksLeft = config.blockCount;
 
-    ball.setLocation(height / 1.3, width / 2);
+    paddle = new Paddle();
+    paddle.setSize(BlockData.blockWidth * 2, Settings.paddleHeight);
+    paddle.setLocation(width / 2, height - height / 20);
+    paddle.setFilled(true);
+    paddle.normalColor();
+    add(paddle);
+
+    ball.setLocation(width / 2, height / 1.3);
     ball.setBoundaryBox(width, height);
     ball.setSize(ballSize(width, height));
     add(ball);
     running = true;
   }
 
-  // public void mouseMoved(MouseEvent e) {
-  //   ball.setX(e.getX());
-  //   ball.setY(e.getY());
-  // }
-
-  void tick() {
-    ball.scram();
+  /**
+   * advances the game
+   * 
+   * @return if the game should keep running
+   */
+  boolean tick() {
+    if (ball.scram() != 0) { // that means that it's hit the bottom
+      return false;
+    }
     doCollide();
-    pause(30);
+    pause(Settings.speed);
+    return true;
   }
 
   void doCollide() {
-    Set<Block> blocks = new LinkedHashSet<>();
+    if (ball.getY() < BlockData.areaHeight) {
+      doBlockCollide();
+    } else if (ball.getBottomY() > paddle.getY()) {
+      paddleCollide();
+    }
+  }
+
+  volatile Paddle paddle;
+
+  void paddleCollide() {
+    Point clamped = ballClamped(paddle);
+    if (ball.has(clamped)) {
+      temp(clamped);
+      paddle.gotHit();
+      nextTick.add((Breakout b) -> paddle.normalColor());
+      ball.setVelocity(paddle.getBounceAngle(clamped));
+    }
+  }
+
+  public void mouseMoved(MouseEvent e) {
+    paddle.setX(e.getX());
+  }
+
+  Set<Block> collisionHashSet = new LinkedHashSet<>();
+
+  void doBlockCollide() {
     // blocks.add(BlockData.getBlockAtPoint(ball.getLocation())); // center
-    blocks.add(BlockData.getBlockAtPoint(ball.getX(), ball.getY())); // top left
-    blocks.add(BlockData.getBlockAtPoint(ball.getRightX(), ball.getY())); // top right
-    blocks.add(BlockData.getBlockAtPoint(ball.getX(), ball.getBottomY())); // bottom left
-    blocks.add(BlockData.getBlockAtPoint(ball.getRightX(), ball.getBottomY())); // bottom right
-    blocks.stream().filter(Objects::nonNull).forEach((Block b) -> {
+    collisionHashSet.add(BlockData.getBlockAtPoint(ball.getX(), ball.getY())); // top left
+    collisionHashSet.add(BlockData.getBlockAtPoint(ball.getRightX(), ball.getY())); // top right
+    collisionHashSet.add(BlockData.getBlockAtPoint(ball.getX(), ball.getBottomY())); // bottom left
+    collisionHashSet.add(BlockData.getBlockAtPoint(ball.getRightX(), ball.getBottomY())); // bottom right
+    collisionHashSet.stream().filter(Objects::nonNull).forEach((Block b) -> {
       // final Color previous = b.getFillColor();
-      BallCollision bC = hasCollided(b);
+      BallCollision bC = whereHasCollided(b);
       if (bC.x == XCollide.LEFT) {
         // remember, the block is being hit from the LEFT side
         // therefore the ball should also bounce left
@@ -445,19 +575,20 @@ public class Breakout extends GraphicsProgram {
       } else if (bC.y == YCollide.BOTTOM) {
         ball.velocityDown();
       }
-      if (bC.hasCollided) {
-        bean(b);
+      // System.out.println(bC.toString());
+      if (bC.whereHasCollided) {
+        beanBlock(b);
       }
     });
+    collisionHashSet.clear();
   }
 
-  Point ballClamped(Block b) {
+  Point ballClamped(Blonk b) {
     return b.closestPointTo(ball.getCenter());
   }
 
-  BallCollision hasCollided(Block b) {
+  BallCollision whereHasCollided(Block b) {
     Point clamped = ballClamped(b);
-    // final DisplayPoint dP = new DisplayPoint(clamped, 6);
     XCollide xC = XCollide.NO;
     YCollide yC = YCollide.NO;
     // blue
@@ -483,20 +614,18 @@ public class Breakout extends GraphicsProgram {
       } else {
         yC = YCollide.NO;
       }
+      // if (Settings.collisionDots) {
+      // final DisplayPoint dP = new DisplayPoint(clamped, 6);
+      // Color fc;
+      // add(dP);
+      // nextTick.add((Breakout B) -> B.remove(dP));
+      // }
     }
-    // add(dP);
-    // nextTick.add((Breakout B) -> B.remove(dP));
     return new BallCollision(xC, yC);
   }
 
-  void bean(Block b) {
-    b.damage();
-    if (b.health < 0) {
-    removeBlock(b);
-    }
-    isGameOver();
-  }
-
-  void isGameOver() {
+  void gameOver() {
+    pause();
+    clear();
   }
 }

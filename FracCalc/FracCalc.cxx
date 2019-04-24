@@ -10,13 +10,13 @@ string e("\x1B[");
 string rst(e + "0m");
 string pink(e + "35m");
 string cyan(e + "36m");
+const char MIXED_NUM_DELIMITER('+');
 
-void interrupt( int signum ) {
-   cout << pink << "\nInterrupt! Exiting Gracefully...\n";
-   exit(signum);  
+void interrupt(int signum) {
+  cout << pink << "\nInterrupt! Exiting Gracefully...\n";
+  exit(signum);
 }
 
-const char MIXED_NUM_DELIMITER('_');
 class Fraction {
   int nu;
   int de;
