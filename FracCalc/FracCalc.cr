@@ -1,9 +1,6 @@
-
-
-e = "\033["
-reset = "#{e}0m"
-pink = "#{e}35m"
-cyan = "#{e}36m"
+reset = "\033[0m"
+pink = "\033[35m"
+cyan = "\033[36m"
 
 Signal::INT.trap {
   puts "\n#{pink}Interrupt! Exiting Gracefully...#{reset}"

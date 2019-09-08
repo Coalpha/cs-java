@@ -2,7 +2,7 @@ import java.awt.*;
 import acm.program.*;
 import acm.graphics.*;
 import java.awt.event.*;
-import java.awt.geom.Point2D;
+// import java.awt.geom.Point2D;
 import java.util.function.*;
 
 import java.util.Set;
@@ -348,23 +348,29 @@ public class Breakout extends GraphicsProgram {
   }
 
   Thread thread;
-  volatile boolean running = false;
-  static int originalCountDown = 1;
-  volatile int countDown = originalCountDown;
-
-  private boolean paused = false;
+  boolean paused = true;
+  boolean runInsteadOfUnpause = false;
 
   void unpause() {
-    paused = false;
+    if (runInsteadOfUnpause) {
+      run();
+      runInsteadOfUnpause = false;
+    } else {
+      paused = false;
+    }
   }
 
   void pause() {
     paused = true;
   }
 
-  public void mouseClicked() {
-    System.out.println("Hey, I'm actually working now for some reason");
-    paused = !paused;
+  public void mouseClicked(MouseEvent e) {
+    // System.out.println("Hey, I'm actually working now for some reason");
+    if (paused) {
+      unpause();
+    } else {
+      pause();
+    }
   }
 
   public void init() {
@@ -372,31 +378,18 @@ public class Breakout extends GraphicsProgram {
     addComponentListener(new ComponentAdapter() {
       @Override
       public void componentResized(ComponentEvent e) {
-        running = false;
-        countDown = originalCountDown;
+        pause();
+        runInsteadOfUnpause = true;
       }
     });
     thread = new Thread(() -> {
       while (true) {
         if (that.paused) {
-          try {
-            Thread.sleep(100);
-          } catch (Exception e) {
-
-          }
-        } else if (that.running) {
+          pause(100);
+        } else {
           nextTick.stream().forEach((Consumer<Breakout> c) -> c.accept(that));
           if (!tick()) {
             gameOver();
-          }
-        } else {
-          try {
-            if (countDown-- > 0) {
-              Thread.sleep(100);
-            } else {
-              that.run();
-            }
-          } catch (Exception e) {
           }
         }
       }
@@ -428,14 +421,19 @@ public class Breakout extends GraphicsProgram {
     }
 
     Block block(int arraX, int arraY) {
-      if (arraX < config.countX && arraY < config.countY) {
+      if (
+        arraX > 0
+        && arraY > 0
+        && arraX < config.countX
+        && arraY < config.countY
+      ) {
         return blocks[arraY][arraX];
       }
       return null;
     }
 
     Block getBlockAtPoint(int x, int y) {
-      return block(x / blockWidth, y / blockHeight);
+      return block((x - boundsX[0]) / blockWidth, (y - boundsY[0]) / blockHeight);
     }
 
     Block getBlockAtPoint(double x, double y) {
@@ -511,7 +509,8 @@ public class Breakout extends GraphicsProgram {
     ball.setBoundaryBox(width, height);
     ball.setSize(ballSize(width, height));
     add(ball);
-    running = true;
+    ball.velocitX = 0;
+    ball.velocitY = -4;
   }
 
   /**
@@ -626,6 +625,7 @@ public class Breakout extends GraphicsProgram {
 
   void gameOver() {
     pause();
+    runInsteadOfUnpause = true;
     clear();
   }
 }
